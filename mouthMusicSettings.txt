@@ -1,0 +1,12 @@
+127.0.0.1
+6730
+/tongue_gestures/intensity
+/tongue_gestures/horizontal
+/tongue_gestures/vertical
+100
+640
+480
+-1
+11
+97
+True
