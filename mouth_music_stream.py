@@ -16,6 +16,8 @@ from tkinter import filedialog
 from PIL import Image, ImageTk
 from oscpy.client import OSCClient
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu" )
+
 # Default Values
 streamIP = "127.0.0.1"
 streamPort = 6730
@@ -50,10 +52,14 @@ def main():
 		saveSettings()
 	setInputVideoSize(capture,captureWidth,captureHeight)
 	model = mmodel.loadModel("","mouthmodel.pt") # Uses model(1) in local directory(0)
+	if torch.cuda.is_available():
+		model.to(device)
 	root = tk.Tk()
 	root.geometry("900x600")
 	app = Application(master=root)
 	app.mainloop()
+	if torch.cuda.is_available():
+		torch.cuda.empty_cache()
 
 def loadSettings():
 	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamIntensityTopic,streamNumberOfPositions
@@ -329,6 +335,8 @@ def timeStreamAndGetStats(tkRoot,speedLabel):
 def sendFrameToModelAndProcessOuput(streamClient=None,withViz=False,recordFileName=None,recordWriter=None):
 	modelInput,image = getFrame(320,240)
 	modelOuput = model.forward(modelInput)
+	if torch.cuda.is_available():
+		modelOuput = modelOuput.cpu()
 	processedModelOuputDict = processModelOuput(modelOuput)
 	if processedModelOuputDict["lipConf"] > lipDetectionConfidenceThreshold and processedModelOuputDict["tongueConf"] > tongueDetectionConfidenceThreshold:
 		if streamClient != None:
@@ -370,6 +378,8 @@ def getFrame(outputW,outputH):
 	sample = torch.from_numpy(colorIMG).float().unsqueeze(0)
 	sample = sample.permute((0,3,1,2))
 	sample = sample.unsqueeze(0)
+	if torch.cuda.is_available():
+		sample = sample.to(device)
 	return sample,img
 		
 def processModelOuput(modelOuput):
@@ -380,7 +390,7 @@ def processModelOuput(modelOuput):
 	if detectionDict["tongueOut"] > tongueOutConfidenceThreshold:
 		detectionDict["tongueOut"] = True
 		detectionDict["xPosition"] = streamNumberOfPositions/2
-		detectionDict["yPosition"] = streamNumberOfPositions
+		detectionDict["yPosition"] = 0
 	else:
 		detectionDict["tongueOut"] = False
 	return detectionDict		
