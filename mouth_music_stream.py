@@ -379,7 +379,7 @@ def processModelOuput(modelOuput):
 	if detectionDict["tongueOut"] > tongueOutConfidenceThreshold:
 		detectionDict["tongueOut"] = True
 		detectionDict["xPosition"] = streamNumberOfPositions/2
-		detectionDict["yPosition"] = 0
+		detectionDict["yPosition"] = streamNumberOfPositions
 	else:
 		detectionDict["tongueOut"] = False
 	return detectionDict		
