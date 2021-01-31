@@ -301,7 +301,8 @@ def recordAndStreamDetections(tkRoot,recordFileName="output.avi"):
 	recordWriter.release()
 
 def updateImageAndDetections(parent,imageLabel):
-	processedModelOuputDict,image = sendFrameToModelAndProcessOuput(withViz=True)
+	streamClient = OSCClient(streamIP,streamPort)
+	processedModelOuputDict,image = sendFrameToModelAndProcessOuput(streamClient,withViz=True)
 	image = addDetectionsToImage(image,processedModelOuputDict)
 	image = addOffsetAndCircleToImage(image,processedModelOuputDict["lipPosition"])
 	placeOpenCVImageInTK(image,imageLabel)
