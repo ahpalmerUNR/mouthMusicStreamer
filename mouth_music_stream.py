@@ -31,6 +31,9 @@ captureShowBoxOnRecord = False
 
 lipOffset = (0,2)
 lipCircleRadius = 10
+lipDetectionConfidenceThreshold = 0.7
+tongueDetectionConfidenceThreshold = 0.7
+tongueOutConfidenceThreshold = 0.5
 
 model = []
 
@@ -53,7 +56,8 @@ def main():
 	app.mainloop()
 
 def loadSettings():
-	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamIntensityTopic,streamNumberOfPositions, lipOffset,lipCircleRadius,captureShowBoxOnRecord
+	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamIntensityTopic,streamNumberOfPositions
+	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,lipDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,tongueOutConfidenceThreshold
 	with open("mouthMusicSettings.txt", "r") as file:
 		streamIP = file.readline().replace("\n","")
 		streamPort = int(file.readline().replace("\n",""))
@@ -65,6 +69,9 @@ def loadSettings():
 		captureHeight = int(file.readline().replace("\n",""))
 		lipOffset = int(file.readline().replace("\n","")), int(file.readline().replace("\n",""))
 		lipCircleRadius = int(file.readline().replace("\n",""))
+		lipDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
+		tongueDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
+		tongueOutConfidenceThreshold = float(file.readline().replace("\n",""))
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
 		
@@ -81,6 +88,9 @@ def saveSettings():
 		file.write("%d\n"%lipOffset[0])
 		file.write("%d\n"%lipOffset[1])
 		file.write("%d\n"%lipCircleRadius)
+		file.write("%f\n"%lipDetectionConfidenceThreshold)
+		file.write("%f\n"%tongueDetectionConfidenceThreshold)
+		file.write("%f\n"%tongueOutConfidenceThreshold)
 		file.write("%r\n"%captureShowBoxOnRecord)
 		
 def setInputVideoSize(captureObject,xDimPx,yDimPx):
@@ -228,7 +238,7 @@ class Application(tk.Frame):
 
 		def updateSettingsAndSave(settingEntriesDict):
 			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamIntensityTopic,streamNumberOfPositions
-			global captureWidth,captureHeight
+			global captureWidth,captureHeight,lipDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,tongueOutConfidenceThreshold
 			streamIP = settingEntriesDict["IP"].get()
 			streamPort = int(settingEntriesDict["Port"].get())
 			streamVerticalTopic = settingEntriesDict["Vertical Topic"].get()
@@ -237,6 +247,9 @@ class Application(tk.Frame):
 			streamNumberOfPositions = int(settingEntriesDict["Number of Positions"].get())
 			captureWidth = int(settingEntriesDict["Image Width(Pixels)"].get())
 			captureHeight = int(settingEntriesDict["Image Height(Pixels)"].get())
+			lipDetectionConfidenceThreshold = float(settingEntriesDict["Lip Detection Threshold (0.0 to 1.0)"].get())
+			tongueDetectionConfidenceThreshold = float(settingEntriesDict["Tongue Detection Threshold (0.0 to 1.0)"].get())
+			tongueOutConfidenceThreshold = float(settingEntriesDict["Tongue Out Detection Threshold (0.0 to 1.0)"].get())
 			saveSettings()
 			setInputVideoSize(capture,captureWidth,captureHeight)
 			
@@ -263,6 +276,9 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Number of Positions",streamNumberOfPositions)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Image Width(Pixels)",captureWidth)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Image Height(Pixels)",captureHeight)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Lip Detection Threshold (0.0 to 1.0)",lipDetectionConfidenceThreshold)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Detection Threshold (0.0 to 1.0)",tongueDetectionConfidenceThreshold)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Out Detection Threshold (0.0 to 1.0)",tongueOutConfidenceThreshold)
 		insertSubframeWithCheckbox(settingsChildFrame,"Detection Box on Video",checkButtonVariable,1,0,setBoxOnRecordSetting)
 		settingsChildFrame.pack({"side":"top","fill":"both","expand":True})
 		return lambda:updateSettingsAndSave(settingEntriesDict)
@@ -313,7 +329,7 @@ def sendFrameToModelAndProcessOuput(streamClient=None,withViz=False,recordFileNa
 	modelInput,image = getFrame(320,240)
 	modelOuput = model.forward(modelInput)
 	processedModelOuputDict = processModelOuput(modelOuput)
-	if processedModelOuputDict["lipConf"] > .7 and processedModelOuputDict["tongueConf"] > .5:
+	if processedModelOuputDict["lipConf"] > lipDetectionConfidenceThreshold and processedModelOuputDict["tongueConf"] > tongueDetectionConfidenceThreshold:
 		if streamClient != None:
 			streamModelOutput(processedModelOuputDict,streamClient)
 	if recordFileName != None:
@@ -360,7 +376,7 @@ def processModelOuput(modelOuput):
 	xPosition, yPosition = projectToSquareInCircle(detectionDict["tonguePosition"],detectionDict["lipPosition"])
 	detectionDict["xPosition"] = xPosition
 	detectionDict["yPosition"] = yPosition
-	if detectionDict["tongueOut"] > .7:
+	if detectionDict["tongueOut"] > tongueOutConfidenceThreshold:
 		detectionDict["tongueOut"] = True
 		detectionDict["xPosition"] = streamNumberOfPositions/2
 		detectionDict["yPosition"] = 0
