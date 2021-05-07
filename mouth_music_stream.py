@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-01-28 21:41:35
+# @Last Modified time: 2021-05-06 23:41:04
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -21,10 +21,19 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu" )
 # Default Values
 streamIP = "127.0.0.1"
 streamPort = 6730
-streamIntensityTopic = "/tongue_gestures/intensity"
+
+streamMouthIntensityTopic = "/tongue_gestures/mouth_intensity"
 streamHorizontalTopic = "/tongue_gestures/horizontal"
 streamVerticalTopic = "/tongue_gestures/vertical"
+streamPuckerTopic = "/tongue_gestures/pucker"
+streamTongueOutTopic = "/tongue_gestures/tongue_out"
 streamNumberOfPositions = 100
+
+streamRightEyeTopic = "/tongue_gestures/right_eye"
+streamLeftEyeTopic = "/tongue_gestures/left_eye"
+streamLeftBrowTopic = "/tongue_gestures/brow"
+streamEyeIntensityTopic = "tongue_gestures/eye_intensity"
+
 
 capture = cv.VideoCapture(0)
 captureWidth = 640
@@ -33,27 +42,32 @@ captureShowBoxOnRecord = False
 
 lipOffset = (0,2)
 lipCircleRadius = 10
-lipDetectionConfidenceThreshold = 0.7
-tongueDetectionConfidenceThreshold = 0.7
-tongueOutConfidenceThreshold = 0.5
+mouthDetectionConfidenceThreshold = 0.3
+tongueDetectionConfidenceThreshold = 0.2
+eyeDetectionConfidenceThreshold = 0.2
+mouthIntensityThreshold = 15
+eyeIntensityThreshold = 15
 
 model = []
+mouthModel = []
+eyeModel = []
 
 # Flow control and tkinter image workaround list
 stopCurent = True
 tkimg = [None]
 
 def main():
-	global model
+	global mouthModel,eyeModel
 	try:
 		loadSettings()
 	except Exception as e:
 		print("Settings Reset to Default")
 		saveSettings()
 	setInputVideoSize(capture,captureWidth,captureHeight)
-	model = mmodel.loadModel("","mouthmodel.pt") # Uses model(1) in local directory(0)
+	mouthModel,eyeModel = mmodel.loadModel("","mouthmodel.pt") # Uses model base name (arg 1) in local directory (arg 0)
 	if torch.cuda.is_available():
-		model.to(device)
+		mouthModel.to(device)
+		eyeModel.to(device)
 	root = tk.Tk()
 	root.geometry("900x600")
 	app = Application(master=root)
@@ -62,22 +76,31 @@ def main():
 		torch.cuda.empty_cache()
 
 def loadSettings():
-	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamIntensityTopic,streamNumberOfPositions
-	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,lipDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,tongueOutConfidenceThreshold
+	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamMouthIntensityTopic,streamNumberOfPositions
+	global lipOffset,lipCircleRadius,captureShowBoxOnRecord
+	global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 	with open("mouthMusicSettings.txt", "r") as file:
 		streamIP = file.readline().replace("\n","")
 		streamPort = int(file.readline().replace("\n",""))
-		streamIntensityTopic = file.readline().replace("\n","")
+		streamMouthIntensityTopic = file.readline().replace("\n","")
 		streamHorizontalTopic = file.readline().replace("\n","")
 		streamVerticalTopic = file.readline().replace("\n","")
+		streamPuckerTopic = file.readline().replace("\n","")
+		streamTongueOutTopic = file.readline().replace("\n","")
+		streamRightEyeTopic = file.readline().replace("\n","")
+		streamLeftEyeTopic = file.readline().replace("\n","")
+		streamLeftBrowTopic = file.readline().replace("\n","")
+		streamEyeIntensityTopic = file.readline().replace("\n","")
 		streamNumberOfPositions = int(file.readline().replace("\n",""))
 		captureWidth = int(file.readline().replace("\n",""))
 		captureHeight = int(file.readline().replace("\n",""))
 		lipOffset = int(file.readline().replace("\n","")), int(file.readline().replace("\n",""))
 		lipCircleRadius = int(file.readline().replace("\n",""))
-		lipDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
+		mouthDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
 		tongueDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
-		tongueOutConfidenceThreshold = float(file.readline().replace("\n",""))
+		eyeDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
+		mouthIntensityThreshold = int(file.readline().replace("\n",""))
+		eyeIntensityThreshold = int(file.readline().replace("\n",""))
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
 		
@@ -85,18 +108,26 @@ def saveSettings():
 	with open("mouthMusicSettings.txt", "w") as file:
 		file.write(streamIP+"\n")
 		file.write("%d\n"%streamPort)
-		file.write(streamIntensityTopic+"\n")
+		file.write(streamMouthIntensityTopic+"\n")
 		file.write(streamHorizontalTopic + "\n")
 		file.write(streamVerticalTopic+"\n")
+		file.write(streamPuckerTopic+"\n")
+		file.write(streamTongueOutTopic+"\n")
+		file.write(streamRightEyeTopic+"\n")
+		file.write(streamLeftEyeTopic+"\n")
+		file.write(streamLeftBrowTopic+"\n")
+		file.write(streamEyeIntensityTopic+"\n")
 		file.write("%d\n"%streamNumberOfPositions)
 		file.write("%d\n"%captureWidth)
 		file.write("%d\n"%captureHeight)
 		file.write("%d\n"%lipOffset[0])
 		file.write("%d\n"%lipOffset[1])
 		file.write("%d\n"%lipCircleRadius)
-		file.write("%f\n"%lipDetectionConfidenceThreshold)
+		file.write("%f\n"%mouthDetectionConfidenceThreshold)
 		file.write("%f\n"%tongueDetectionConfidenceThreshold)
-		file.write("%f\n"%tongueOutConfidenceThreshold)
+		file.write("%f\n"%eyeDetectionConfidenceThreshold)
+		file.write("%d\n"%mouthIntensityThreshold)
+		file.write("%d\n"%eyeIntensityThreshold)
 		file.write("%r\n"%captureShowBoxOnRecord)
 		
 def setInputVideoSize(captureObject,xDimPx,yDimPx):
@@ -243,19 +274,29 @@ class Application(tk.Frame):
 				captureShowBoxOnRecord = False
 
 		def updateSettingsAndSave(settingEntriesDict):
-			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamIntensityTopic,streamNumberOfPositions
-			global captureWidth,captureHeight,lipDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,tongueOutConfidenceThreshold
+			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamMouthIntensityTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
+			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic,streamEyeIntensityTopic
+			global captureWidth,captureHeight
+			global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 			streamIP = settingEntriesDict["IP"].get()
 			streamPort = int(settingEntriesDict["Port"].get())
 			streamVerticalTopic = settingEntriesDict["Vertical Topic"].get()
 			streamHorizontalTopic = settingEntriesDict["Horizontal Topic"].get()
-			streamIntensityTopic = settingEntriesDict["Intensity Topic"].get()
+			streamMouthIntensityTopic = settingEntriesDict["Mouth Intensity Topic"].get()
+			streamPuckerTopic = settingEntriesDict["Pucker Topic"].get()
+			streamTongueOutTopic = settingEntriesDict["Tongue Out Topic"].get()
+			streamRightEyeTopic = settingEntriesDict["Left Wink Topic"].get()
+			streamLeftEyeTopic = settingEntriesDict["Right Wink Topic"].get()
+			streamLeftBrowTopic = settingEntriesDict["Left Brow Topic"].get()
+			streamEyeIntensityTopic = settingEntriesDict["Eye Intensity Topic"].get()
 			streamNumberOfPositions = int(settingEntriesDict["Number of Positions"].get())
 			captureWidth = int(settingEntriesDict["Image Width(Pixels)"].get())
 			captureHeight = int(settingEntriesDict["Image Height(Pixels)"].get())
-			lipDetectionConfidenceThreshold = float(settingEntriesDict["Lip Detection Threshold (0.0 to 1.0)"].get())
+			mouthDetectionConfidenceThreshold = float(settingEntriesDict["Mouth Gesture Detection Threshold (0.0 to 1.0)"].get())
 			tongueDetectionConfidenceThreshold = float(settingEntriesDict["Tongue Detection Threshold (0.0 to 1.0)"].get())
-			tongueOutConfidenceThreshold = float(settingEntriesDict["Tongue Out Detection Threshold (0.0 to 1.0)"].get())
+			eyeDetectionConfidenceThreshold = float(settingEntriesDict["Eye Gesture Detection Threshold (0.0 to 1.0)"].get())
+			mouthIntensityThreshold = int(settingEntriesDict["Mouth Trigger Intensity Threshold (0 to 100)"].get())
+			eyeIntensityThreshold = int(settingEntriesDict["Eye Trigger Intensity Threshold (0 to 100)"].get())
 			saveSettings()
 			setInputVideoSize(capture,captureWidth,captureHeight)
 			
@@ -263,7 +304,7 @@ class Application(tk.Frame):
 			childFrame = tk.Frame(parentFrame)
 			label = tk.Label(childFrame,text = entryName)
 			label.pack({"side":"left"})
-			settingEntriesDict[entryName] = tk.Entry(childFrame,width=30)
+			settingEntriesDict[entryName] = tk.Entry(childFrame,width=50)
 			settingEntriesDict[entryName].insert(0,currentValue)
 			settingEntriesDict[entryName].pack({"side":"right"})
 			childFrame.pack({"side":"top","fill":"both","expand":True})
@@ -278,13 +319,21 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Port",streamPort)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Vertical Topic",streamVerticalTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Horizontal Topic",streamHorizontalTopic)
-		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Intensity Topic",streamIntensityTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Mouth Intensity Topic",streamMouthIntensityTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Pucker Topic",streamPuckerTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Out Topic",streamTongueOutTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Left Wink Topic",streamLeftEyeTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Right Wink Topic",streamRightEyeTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Left Brow Topic",streamLeftBrowTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Intensity Topic",streamEyeIntensityTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Number of Positions",streamNumberOfPositions)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Image Width(Pixels)",captureWidth)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Image Height(Pixels)",captureHeight)
-		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Lip Detection Threshold (0.0 to 1.0)",lipDetectionConfidenceThreshold)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Mouth Gesture Detection Threshold (0.0 to 1.0)",mouthDetectionConfidenceThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Detection Threshold (0.0 to 1.0)",tongueDetectionConfidenceThreshold)
-		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Out Detection Threshold (0.0 to 1.0)",tongueOutConfidenceThreshold)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Gesture Detection Threshold (0.0 to 1.0)",eyeDetectionConfidenceThreshold)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Mouth Trigger Intensity Threshold (0 to 100)",mouthIntensityThreshold)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Trigger Intensity Threshold (0 to 100)",eyeIntensityThreshold)
 		insertSubframeWithCheckbox(settingsChildFrame,"Detection Box on Video",checkButtonVariable,1,0,setBoxOnRecordSetting)
 		settingsChildFrame.pack({"side":"top","fill":"both","expand":True})
 		return lambda:updateSettingsAndSave(settingEntriesDict)
@@ -318,10 +367,10 @@ def timeStreamAndGetStats(tkRoot,speedLabel):
 	timeDiffs = []
 	itter = 0
 	while not stopCurent and itter < 120:
-		start = time.time()
+		start = time.perf_counter()
 		tkRoot.update_idletasks()
 		sendFrameToModelAndProcessOuput(streamClient)
-		end = time.time()
+		end = time.perf_counter()
 		speed = 1/(end-start)
 		speedLabel.config(text = speed)
 		if itter >= 30:
@@ -334,35 +383,41 @@ def timeStreamAndGetStats(tkRoot,speedLabel):
 	
 def sendFrameToModelAndProcessOuput(streamClient=None,withViz=False,recordFileName=None,recordWriter=None):
 	modelInput,image = getFrame(320,240)
-	modelOuput = model.forward(modelInput)
-	if torch.cuda.is_available():
-		modelOuput = modelOuput.cpu()
-	processedModelOuputDict = processModelOuput(modelOuput)
-	if processedModelOuputDict["lipConf"] > lipDetectionConfidenceThreshold and processedModelOuputDict["tongueConf"] > tongueDetectionConfidenceThreshold:
-		if streamClient != None:
-			streamModelOutput(processedModelOuputDict,streamClient)
+	mouthModelOutput = mouthModel.forward(modelInput)
+	eyeModelOutput = eyeModel.forward(modelInput)
+	processedModelOuputDict = processModelOuput([mouthModelOutput,eyeModelOutput])
+	if streamClient != None:
+		streamModelOutput(processedModelOuputDict,streamClient)
 	if recordFileName != None:
 		recordFrame(recordWriter,image,processedModelOuputDict)
 	if withViz:
 		return processedModelOuputDict,image
 
 def addDetectionsToImage(image,processedModelOuputDict):
-	wScale,hScale = getWHscales(320,240)
-	tonguePos = (int(processedModelOuputDict["tonguePosition"][0]/wScale),int(processedModelOuputDict["tonguePosition"][1]/hScale))
-	lipPos = (int(processedModelOuputDict["lipPosition"][0]/wScale),int(processedModelOuputDict["lipPosition"][1]/hScale))
-	color = (200,180,0)
-	if processedModelOuputDict["tongueOut"]:
-		color = (120,0,200)
-	cv.circle(image,lipPos, 2,(255,0,255),2)
-	cv.circle(image,tonguePos, 2,color,2)
-	cv.rectangle(image,(tonguePos[0] - 10,tonguePos[1] - 10),(tonguePos[0] + 10,tonguePos[1] + 10),color,2)
+	scales = getWHscales(320,240)
+	mfunc.rescaleLabelPositions(processedModelOuputDict,scales)
+	cv.circle(image,processedModelOuputDict["lipPosition"], 2,(255,0,145),2)
+	cv.circle(image,processedModelOuputDict["leftEyePosition"], 2,(17,255,0),2)
+	cv.circle(image,processedModelOuputDict["rightEyePosition"], 2,(255,255,0),2)
+	cv.rectangle(image,(int(processedModelOuputDict["leftBrowPosition"][0] - .5*processedModelOuputDict["leftBrowBoxWidth"]),int(processedModelOuputDict["leftBrowPosition"][1] - .5*processedModelOuputDict["leftBrowBoxHeight"])),(int(processedModelOuputDict["leftBrowPosition"][0] + .5*processedModelOuputDict["leftBrowBoxWidth"]),int(processedModelOuputDict["leftBrowPosition"][1] + .5*processedModelOuputDict["leftBrowBoxHeight"])),(0,180,200),2)
+
+	if processedModelOuputDict["mouthIntensity"] >= mouthIntensityThreshold and processedModelOuputDict["mouthTriggerConf"] >= mouthDetectionConfidenceThreshold:
+		if processedModelOuputDict["mouthTrigger"] == "In Cheek" and processedModelOuputDict["tongueConf"] >= tongueDetectionConfidenceThreshold:
+			cv.circle(image,processedModelOuputDict["tonguePosition"], 2,(0,255,255),2)
+		
+		if processedModelOuputDict["mouthTrigger"] != "None":
+			position = processedModelOuputDict["lipPosition"]
+			cv.putText(image,processedModelOuputDict["mouthTrigger"],(position[0]-40,position[1]),cv.FONT_HERSHEY_SIMPLEX,1,(0,0,255))
+
+	if processedModelOuputDict["eyeIntensity"] >= eyeIntensityThreshold and processedModelOuputDict["eyeTriggerConf"] >= eyeDetectionConfidenceThreshold and processedModelOuputDict["eyeTrigger"] != "None":
+			position = processedModelOuputDict["leftEyePosition"]
+			cv.putText(image,processedModelOuputDict["eyeTrigger"],(position[0]+30,position[1]),cv.FONT_HERSHEY_SIMPLEX,1,(0,0,255))
+
 	return image
 	
 def addOffsetAndCircleToImage(image,lipPosition):
-	wScale,hScale = getWHscales(320,240)
-	mouthPose = int(lipPosition[0]/wScale + lipOffset[0]/wScale),int(lipPosition[1]/hScale + lipOffset[1]/wScale)
-	cv.circle(image,mouthPose, 2,(255,255,255),2)
-	cv.circle(image,mouthPose, lipCircleRadius,(255,255,255),2)
+	cv.circle(image,lipPosition, 2,(255,255,255),2)
+	cv.circle(image,lipPosition, lipCircleRadius,(255,255,255),2)
 	return image	
 	
 def placeOpenCVImageInTK(image,label_image):
@@ -377,7 +432,6 @@ def getFrame(outputW,outputH):
 	mfunc.setGridSize(outputW,outputH)
 	sample = torch.from_numpy(colorIMG).float().unsqueeze(0)
 	sample = sample.permute((0,3,1,2))
-	sample = sample.unsqueeze(0)
 	if torch.cuda.is_available():
 		sample = sample.to(device)
 	return sample,img
@@ -387,18 +441,32 @@ def processModelOuput(modelOuput):
 	xPosition, yPosition = projectToSquareInCircle(detectionDict["tonguePosition"],detectionDict["lipPosition"])
 	detectionDict["xPosition"] = xPosition
 	detectionDict["yPosition"] = yPosition
-	if detectionDict["tongueOut"] > tongueOutConfidenceThreshold:
-		detectionDict["tongueOut"] = True
-		detectionDict["xPosition"] = streamNumberOfPositions/2
-		detectionDict["yPosition"] = 0
-	else:
-		detectionDict["tongueOut"] = False
 	return detectionDict		
 	
 def streamModelOutput(modleOutput,streamClient):
-	streamClient.send_message(bytes(streamIntensityTopic, encoding="ascii"),[modleOutput["intensity"]])
-	streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[modleOutput["xPosition"]])
-	streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[modleOutput["yPosition"]])
+	if modleOutput["mouthIntensity"] >= mouthIntensityThreshold and modleOutput["mouthTriggerConf"] >= mouthDetectionConfidenceThreshold:
+		if modleOutput["mouthTrigger"] == "In Cheek" and modleOutput["tongueConf"] >= tongueDetectionConfidenceThreshold:
+			streamClient.send_message(bytes(streamMouthIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
+			streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[modleOutput["xPosition"]])
+			streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[modleOutput["yPosition"]])
+		elif modleOutput["mouthTrigger"] == "Pucker Lips":
+			streamClient.send_message(bytes(streamMouthIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
+			streamClient.send_message(bytes(streamPuckerTopic, encoding="ascii"),[1.0])
+		elif modleOutput["mouthTrigger"] == "Tongue Out":
+			streamClient.send_message(bytes(streamMouthIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
+			streamClient.send_message(bytes(streamTongueOutTopic, encoding="ascii"),[1.0])
+
+	if modleOutput["eyeIntensity"] >= eyeIntensityThreshold and modleOutput["eyeTriggerConf"] >= eyeDetectionConfidenceThreshold:
+		if modleOutput["eyeTrigger"] == "Left Wink":
+			streamClient.send_message(bytes(streamEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
+			streamClient.send_message(bytes(streamLeftEyeTopic, encoding="ascii"),[1.0])
+		elif modleOutput["eyeTrigger"] == "Right Wink":
+			streamClient.send_message(bytes(streamEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
+			streamClient.send_message(bytes(streamRightEyeTopic, encoding="ascii"),[1.0])
+		elif modleOutput["eyeTrigger"] == "Left Brow":
+			streamClient.send_message(bytes(streamEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
+			streamClient.send_message(bytes(streamLeftBrowTopic, encoding="ascii"),[1.0])
+		
 	
 def recordFrame(recordWriter,image,processedModelOuputDict):
 	if captureShowBoxOnRecord:
