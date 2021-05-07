@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-06 23:41:04
+# @Last Modified time: 2021-05-07 16:05:08
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -22,7 +22,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu" )
 streamIP = "127.0.0.1"
 streamPort = 6730
 
-streamMouthIntensityTopic = "/tongue_gestures/mouth_intensity"
+streamCheekIntensityTopic = "/tongue_gestures/cheek_intensity"
+streamPuckerIntensityTopic = "/tongue_gestures/pucker_intensity"
+streamTongueOutIntensityTopic = "/tongue_gestures/tongue_out_intensity"
 streamHorizontalTopic = "/tongue_gestures/horizontal"
 streamVerticalTopic = "/tongue_gestures/vertical"
 streamPuckerTopic = "/tongue_gestures/pucker"
@@ -32,7 +34,9 @@ streamNumberOfPositions = 100
 streamRightEyeTopic = "/tongue_gestures/right_eye"
 streamLeftEyeTopic = "/tongue_gestures/left_eye"
 streamLeftBrowTopic = "/tongue_gestures/brow"
-streamEyeIntensityTopic = "tongue_gestures/eye_intensity"
+streamLeftEyeIntensityTopic = "tongue_gestures/left_eye_intensity"
+streamRightEyeIntensityTopic = "tongue_gestures/right_eye_intensity"
+streamLeftBrowIntensityTopic = "tongue_gestures/left_brow_intensity"
 
 
 capture = cv.VideoCapture(0)
@@ -76,13 +80,17 @@ def main():
 		torch.cuda.empty_cache()
 
 def loadSettings():
-	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamMouthIntensityTopic,streamNumberOfPositions
-	global lipOffset,lipCircleRadius,captureShowBoxOnRecord
+	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
+	global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
+	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight
 	global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
+	global streamCheekIntensityTopic,streamPuckerIntensityTopic,streamTongueOutIntensityTopic,streamLeftEyeIntensityTopic,streamRightEyeIntensityTopic,streamLeftBrowIntensityTopic
 	with open("mouthMusicSettings.txt", "r") as file:
 		streamIP = file.readline().replace("\n","")
 		streamPort = int(file.readline().replace("\n",""))
-		streamMouthIntensityTopic = file.readline().replace("\n","")
+		streamCheekIntensityTopic = file.readline().replace("\n","")
+		streamPuckerIntensityTopic = file.readline().replace("\n","")
+		streamTongueOutIntensityTopic = file.readline().replace("\n","")
 		streamHorizontalTopic = file.readline().replace("\n","")
 		streamVerticalTopic = file.readline().replace("\n","")
 		streamPuckerTopic = file.readline().replace("\n","")
@@ -90,7 +98,9 @@ def loadSettings():
 		streamRightEyeTopic = file.readline().replace("\n","")
 		streamLeftEyeTopic = file.readline().replace("\n","")
 		streamLeftBrowTopic = file.readline().replace("\n","")
-		streamEyeIntensityTopic = file.readline().replace("\n","")
+		streamLeftEyeIntensityTopic = file.readline().replace("\n","")
+		streamRightEyeIntensityTopic = file.readline().replace("\n","")
+		streamLeftBrowIntensityTopic = file.readline().replace("\n","")
 		streamNumberOfPositions = int(file.readline().replace("\n",""))
 		captureWidth = int(file.readline().replace("\n",""))
 		captureHeight = int(file.readline().replace("\n",""))
@@ -108,7 +118,9 @@ def saveSettings():
 	with open("mouthMusicSettings.txt", "w") as file:
 		file.write(streamIP+"\n")
 		file.write("%d\n"%streamPort)
-		file.write(streamMouthIntensityTopic+"\n")
+		file.write(streamCheekIntensityTopic+"\n")
+		file.write(streamPuckerIntensityTopic+"\n")
+		file.write(streamTongueOutIntensityTopic+"\n")
 		file.write(streamHorizontalTopic + "\n")
 		file.write(streamVerticalTopic+"\n")
 		file.write(streamPuckerTopic+"\n")
@@ -116,7 +128,9 @@ def saveSettings():
 		file.write(streamRightEyeTopic+"\n")
 		file.write(streamLeftEyeTopic+"\n")
 		file.write(streamLeftBrowTopic+"\n")
-		file.write(streamEyeIntensityTopic+"\n")
+		file.write(streamLeftEyeIntensityTopic+"\n")
+		file.write(streamRightEyeIntensityTopic+"\n")
+		file.write(streamLeftBrowIntensityTopic+"\n")
 		file.write("%d\n"%streamNumberOfPositions)
 		file.write("%d\n"%captureWidth)
 		file.write("%d\n"%captureHeight)
@@ -274,21 +288,26 @@ class Application(tk.Frame):
 				captureShowBoxOnRecord = False
 
 		def updateSettingsAndSave(settingEntriesDict):
-			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamMouthIntensityTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
-			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic,streamEyeIntensityTopic
+			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
+			global streamCheekIntensityTopic,streamPuckerIntensityTopic,streamTongueOutIntensityTopic
+			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic,streamLeftEyeIntensityTopic,streamRightEyeIntensityTopic,streamLeftBrowIntensityTopic
 			global captureWidth,captureHeight
 			global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 			streamIP = settingEntriesDict["IP"].get()
 			streamPort = int(settingEntriesDict["Port"].get())
 			streamVerticalTopic = settingEntriesDict["Vertical Topic"].get()
 			streamHorizontalTopic = settingEntriesDict["Horizontal Topic"].get()
-			streamMouthIntensityTopic = settingEntriesDict["Mouth Intensity Topic"].get()
 			streamPuckerTopic = settingEntriesDict["Pucker Topic"].get()
 			streamTongueOutTopic = settingEntriesDict["Tongue Out Topic"].get()
+			streamCheekIntensityTopic = settingEntriesDict["Cheek Intensity Topic"].get()
+			streamPuckerIntensityTopic = settingEntriesDict["Pucker Intensity Topic"].get()
+			streamTongueOutIntensityTopic = settingEntriesDict["Tongue Out Intensity Topic"].get()
 			streamRightEyeTopic = settingEntriesDict["Left Wink Topic"].get()
 			streamLeftEyeTopic = settingEntriesDict["Right Wink Topic"].get()
 			streamLeftBrowTopic = settingEntriesDict["Left Brow Topic"].get()
-			streamEyeIntensityTopic = settingEntriesDict["Eye Intensity Topic"].get()
+			streamLeftEyeIntensityTopic = settingEntriesDict["Left Eye Intensity Topic"].get()
+			streamRightEyeIntensityTopic = settingEntriesDict["Right Eye Intensity Topic"].get()
+			streamLeftBrowIntensityTopic = settingEntriesDict["Left Brow Intensity Topic"].get()
 			streamNumberOfPositions = int(settingEntriesDict["Number of Positions"].get())
 			captureWidth = int(settingEntriesDict["Image Width(Pixels)"].get())
 			captureHeight = int(settingEntriesDict["Image Height(Pixels)"].get())
@@ -319,13 +338,17 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Port",streamPort)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Vertical Topic",streamVerticalTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Horizontal Topic",streamHorizontalTopic)
-		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Mouth Intensity Topic",streamMouthIntensityTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Pucker Topic",streamPuckerTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Out Topic",streamTongueOutTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Cheek Intensity Topic",streamCheekIntensityTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Pucker Intensity Topic",streamPuckerIntensityTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Out Intensity Topic",streamTongueOutIntensityTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Left Wink Topic",streamLeftEyeTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Right Wink Topic",streamRightEyeTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Left Brow Topic",streamLeftBrowTopic)
-		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Intensity Topic",streamEyeIntensityTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Left Eye Intensity Topic",streamLeftEyeIntensityTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Right Eye Intensity Topic",streamRightEyeIntensityTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Left Brow Intensity Topic",streamLeftBrowIntensityTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Number of Positions",streamNumberOfPositions)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Image Width(Pixels)",captureWidth)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Image Height(Pixels)",captureHeight)
@@ -446,25 +469,25 @@ def processModelOuput(modelOuput):
 def streamModelOutput(modleOutput,streamClient):
 	if modleOutput["mouthIntensity"] >= mouthIntensityThreshold and modleOutput["mouthTriggerConf"] >= mouthDetectionConfidenceThreshold:
 		if modleOutput["mouthTrigger"] == "In Cheek" and modleOutput["tongueConf"] >= tongueDetectionConfidenceThreshold:
-			streamClient.send_message(bytes(streamMouthIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
+			streamClient.send_message(bytes(streamCheekIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
 			streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[modleOutput["xPosition"]])
 			streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[modleOutput["yPosition"]])
 		elif modleOutput["mouthTrigger"] == "Pucker Lips":
-			streamClient.send_message(bytes(streamMouthIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
+			streamClient.send_message(bytes(streamPuckerIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
 			streamClient.send_message(bytes(streamPuckerTopic, encoding="ascii"),[1.0])
 		elif modleOutput["mouthTrigger"] == "Tongue Out":
-			streamClient.send_message(bytes(streamMouthIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
+			streamClient.send_message(bytes(streamTongueOutIntensityTopic, encoding="ascii"),[modleOutput["mouthIntensity"]])
 			streamClient.send_message(bytes(streamTongueOutTopic, encoding="ascii"),[1.0])
 
 	if modleOutput["eyeIntensity"] >= eyeIntensityThreshold and modleOutput["eyeTriggerConf"] >= eyeDetectionConfidenceThreshold:
 		if modleOutput["eyeTrigger"] == "Left Wink":
-			streamClient.send_message(bytes(streamEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
+			streamClient.send_message(bytes(streamLeftEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
 			streamClient.send_message(bytes(streamLeftEyeTopic, encoding="ascii"),[1.0])
 		elif modleOutput["eyeTrigger"] == "Right Wink":
-			streamClient.send_message(bytes(streamEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
+			streamClient.send_message(bytes(streamRightEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
 			streamClient.send_message(bytes(streamRightEyeTopic, encoding="ascii"),[1.0])
 		elif modleOutput["eyeTrigger"] == "Left Brow":
-			streamClient.send_message(bytes(streamEyeIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
+			streamClient.send_message(bytes(streamLeftBrowIntensityTopic, encoding="ascii"),[modleOutput["eyeIntensity"]])
 			streamClient.send_message(bytes(streamLeftBrowTopic, encoding="ascii"),[1.0])
 		
 	
