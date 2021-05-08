@@ -1,8 +1,6 @@
 127.0.0.1
 6730
 /tongue_gestures/cheek_intensity
-/tongue_gestures/pucker_intensity
-/tongue_gestures/tongue_out_intensity
 /tongue_gestures/horizontal
 /tongue_gestures/vertical
 /tongue_gestures/pucker
@@ -10,9 +8,6 @@
 /tongue_gestures/right_eye
 /tongue_gestures/left_eye
 /tongue_gestures/brow
-tongue_gestures/left_eye_intensity
-tongue_gestures/right_eye_intensity
-tongue_gestures/left_brow_intensity
 100
 640
 480
