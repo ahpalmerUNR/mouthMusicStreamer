@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-08 17:17:50
+# @Last Modified time: 2021-05-08 18:35:51
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -29,14 +29,14 @@ streamPuckerTopic = "/tongue_gestures/pucker"
 streamTongueOutTopic = "/tongue_gestures/tongue_out"
 streamNumberOfPositions = 100
 
-streamRightEyeTopic = "/tongue_gestures/right_eye"
-streamLeftEyeTopic = "/tongue_gestures/left_eye"
+streamRightEyeTopic = "/tongue_gestures/right_wink"
+streamLeftEyeTopic = "/tongue_gestures/left_wink"
 streamLeftBrowTopic = "/tongue_gestures/brow"
 
 streamMouthTopicEndControl = [None,None]
 streamEyeTopicEndControl = [None,None]
 
-capture = cv.VideoCapture(0)
+capture = cv.VideoCapture(0,cv.CAP_DSHOW)
 captureWidth = 640
 captureHeight = 480
 captureShowBoxOnRecord = False
@@ -287,8 +287,8 @@ class Application(tk.Frame):
 			streamPuckerTopic = settingEntriesDict["Pucker Topic"].get()
 			streamTongueOutTopic = settingEntriesDict["Tongue Out Topic"].get()
 			streamCheekIntensityTopic = settingEntriesDict["Cheek Intensity Topic"].get()
-			streamRightEyeTopic = settingEntriesDict["Left Wink Topic"].get()
-			streamLeftEyeTopic = settingEntriesDict["Right Wink Topic"].get()
+			streamRightEyeTopic = settingEntriesDict["Right Wink Topic"].get()
+			streamLeftEyeTopic = settingEntriesDict["Left Wink Topic"].get()
 			streamLeftBrowTopic = settingEntriesDict["Left Brow Topic"].get()
 			streamNumberOfPositions = int(settingEntriesDict["Number of Positions"].get())
 			captureWidth = int(settingEntriesDict["Image Width(Pixels)"].get())
