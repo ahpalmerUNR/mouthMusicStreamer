@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-08 16:58:29
+# @Last Modified time: 2021-05-08 17:17:50
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -480,14 +480,14 @@ def isPriorEyeTopicOver(eyeTopic):
 	global streamEyeTopicEndControl
 	streamEyeTopicEndControl.append(eyeTopic)
 	streamEyeTopicEndControl.pop(0)
-	return streamEyeTopicEndControl[0] != streamEyeTopicEndControl[1] and streamEyeTopicEndControl[1] != None
+	return streamEyeTopicEndControl[0] != streamEyeTopicEndControl[1] and streamEyeTopicEndControl[0] != None
 
 
 def isPriorMouthTopicOver(mouthTopic):
 	global streamMouthTopicEndControl
 	streamMouthTopicEndControl.append(mouthTopic)
 	streamMouthTopicEndControl.pop(0)
-	return streamMouthTopicEndControl[0] != streamMouthTopicEndControl[1] and streamMouthTopicEndControl[1] != None
+	return streamMouthTopicEndControl[0] != streamMouthTopicEndControl[1] and streamMouthTopicEndControl[0] != None
 	
 def recordFrame(recordWriter,image,processedModelOuputDict):
 	if captureShowBoxOnRecord:
