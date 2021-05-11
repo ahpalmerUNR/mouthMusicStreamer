@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-10 21:23:47
+# @Last Modified time: 2021-05-11 14:21:28
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -50,8 +50,8 @@ eyeDetectionConfidenceThreshold = 0.2
 mouthIntensityThreshold = 0
 eyeIntensityThreshold = 0
 
-videoToggleKey = 'g'
-videoToggleState = 0
+streamToggleKey = 'f12'
+streamToggleState = 1
 
 model = []
 mouthModel = []
@@ -83,7 +83,7 @@ def main():
 def loadSettings():
 	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 	global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,videoToggleKey
+	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,streamToggleKey
 	global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 	global streamCheekIntensityTopic
 	with open("mouthMusicSettings.txt", "r") as file:
@@ -107,7 +107,7 @@ def loadSettings():
 		eyeDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
 		mouthIntensityThreshold = int(file.readline().replace("\n",""))
 		eyeIntensityThreshold = int(file.readline().replace("\n",""))
-		videoToggleKey = file.readline()[0]
+		streamToggleKey = file.readline().replace("\n","")
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
 	updateKeyHook()
@@ -135,7 +135,7 @@ def saveSettings():
 		file.write("%f\n"%eyeDetectionConfidenceThreshold)
 		file.write("%d\n"%mouthIntensityThreshold)
 		file.write("%d\n"%eyeIntensityThreshold)
-		file.write("%s\n"%videoToggleKey)
+		file.write("%s\n"%streamToggleKey)
 		file.write("%r\n"%captureShowBoxOnRecord)
 	updateKeyHook()
 		
@@ -180,18 +180,14 @@ class Application(tk.Frame):
 	def drawStream(self):
 		setStopCurrent(False)
 		self.addBackToHomeButton()
-		imageTKLabel = tk.Label(self)
-		imageTKLabel.pack(side="top")
-		runAndStreamDetections(self.master,imageTKLabel)
+		runAndStreamDetections(self.master)
 		
 	def drawRecord(self):
 		setStopCurrent(False)
 		self.addBackToHomeButton()
-		imageTKLabel = tk.Label(self)
-		imageTKLabel.pack(side="top")
 		fileTypes = [('AVI video', '*.avi')]
 		suppliedFileStream = filedialog.asksaveasfile(filetypes = fileTypes, defaultextension = fileTypes)
-		recordAndStreamDetections(self.master,imageTKLabel,suppliedFileStream.name)
+		recordAndStreamDetections(self.master,suppliedFileStream.name)
 		
 	def drawPositioner(self):
 		setStopCurrent(False)
@@ -200,7 +196,8 @@ class Application(tk.Frame):
 		imageTKLabel.pack()
 					
 		def updateImage(parent,label):
-			updateImageAndDetections(parent,label)
+			if streamToggleState == 1:
+				updateImageAndDetections(parent,label)
 			if not stopCurent:
 				parent.master.update_idletasks()
 				parent.master.after(15,lambda:updateImage(parent,label))
@@ -290,7 +287,7 @@ class Application(tk.Frame):
 			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 			global streamCheekIntensityTopic
 			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-			global captureWidth,captureHeight, videoToggleKey
+			global captureWidth,captureHeight, streamToggleKey
 			global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 			streamIP = settingEntriesDict["IP"].get()
 			streamPort = int(settingEntriesDict["Port"].get())
@@ -310,7 +307,7 @@ class Application(tk.Frame):
 			eyeDetectionConfidenceThreshold = float(settingEntriesDict["Eye Gesture Detection Threshold (0.0 to 1.0)"].get())
 			mouthIntensityThreshold = int(settingEntriesDict["Mouth Trigger Intensity Threshold (0 to 100)"].get())
 			eyeIntensityThreshold = int(settingEntriesDict["Eye Trigger Intensity Threshold (0 to 100)"].get())
-			videoToggleKey = settingEntriesDict["Video On Stream Toggle (a-z,0-9)"].get()[0]
+			streamToggleKey = settingEntriesDict["Stream Toggle (use + for multiple keys, and 'plus' for the + key)"].get()
 			saveSettings()
 			setInputVideoSize(capture,captureWidth,captureHeight)
 			
@@ -347,7 +344,7 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Gesture Detection Threshold (0.0 to 1.0)",eyeDetectionConfidenceThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Mouth Trigger Intensity Threshold (0 to 100)",mouthIntensityThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Trigger Intensity Threshold (0 to 100)",eyeIntensityThreshold)
-		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Video On Stream Toggle (a-z,0-9)",videoToggleKey)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Stream Toggle (use + for multiple keys, and 'plus' for the + key)",streamToggleKey)
 		insertSubframeWithCheckbox(settingsChildFrame,"Detection Box on Video",checkButtonVariable,1,0,setBoxOnRecordSetting)
 		settingsChildFrame.pack({"side":"top","fill":"both","expand":True})
 		return lambda:updateSettingsAndSave(settingEntriesDict)
@@ -357,33 +354,33 @@ def setStopCurrent(value):
 	stopCurent = value
 
 def updateKeyHook():
-	keyboard.unhook_all()
-	keyboard.on_press_key(videoToggleKey,lambda _:toggleKeyState())
+	try:
+		keyboard.unhook_all_hotkeys()
+	except AttributeError as e:
+		pass
+	keyboard.add_hotkey(streamToggleKey,lambda :toggleKeyState())
 
 def toggleKeyState():
-	global videoToggleState
-	videoToggleState = 1 - videoToggleState
+	global streamToggleState
+	streamToggleState = 1 - streamToggleState
+	print("Stream On" if streamToggleState == 1 else "Stream Off")
 
 	
-def runAndStreamDetections(tkRoot,imageLabel,recordFileName=None,recordWriter=None):
+def runAndStreamDetections(tkRoot,recordFileName=None,recordWriter=None):
 	streamClient = OSCClient(streamIP,streamPort)
 	while not stopCurent:
-		tkRoot.update()
-		if videoToggleState == 1:
-			imageLabel.pack(side="top")
-			processedModelOuputDict,image = sendFrameToModelAndProcessOuput(streamClient,recordFileName=recordFileName,recordWriter=recordWriter,withViz=True)
-			image = addDetectionsToImage(image,processedModelOuputDict)
-			placeOpenCVImageInTK(image,imageLabel)
-		else:
+		if streamToggleState == 1:
+			tkRoot.update()
 			sendFrameToModelAndProcessOuput(streamClient,recordFileName=recordFileName,recordWriter=recordWriter)
-			imageLabel.pack_forget()
+		else:
+			tkRoot.after(15,tkRoot.update())
 
 	
-def recordAndStreamDetections(tkRoot,imageLabel,recordFileName="output.avi"):
+def recordAndStreamDetections(tkRoot,recordFileName="output.avi"):
 	fourcc = cv.VideoWriter_fourcc(*'XVID')
 	recordWriter = cv.VideoWriter()
 	recordWriter.open(recordFileName, fourcc, 30.0, (captureWidth,  captureHeight),True)
-	runAndStreamDetections(tkRoot,imageLabel,recordFileName,recordWriter)
+	runAndStreamDetections(tkRoot,recordFileName,recordWriter)
 	recordWriter.release()
 
 def updateImageAndDetections(parent,imageLabel):
