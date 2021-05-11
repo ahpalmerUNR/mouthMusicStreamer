@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-08 18:35:51
+# @Last Modified time: 2021-05-10 21:23:47
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -10,6 +10,7 @@ import torch
 import time
 import cv2 as cv
 import numpy as np
+import keyboard
 
 import tkinter as tk
 from tkinter import filedialog
@@ -20,9 +21,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu" )
 
 # Default Values
 streamIP = "127.0.0.1"
-streamPort = 6730
+streamPort = 6731
 
-streamCheekIntensityTopic = "/tongue_gestures/cheek_intensity"
+streamCheekIntensityTopic = "/tongue_gestures/intensity"
 streamHorizontalTopic = "/tongue_gestures/horizontal"
 streamVerticalTopic = "/tongue_gestures/vertical"
 streamPuckerTopic = "/tongue_gestures/pucker"
@@ -42,12 +43,15 @@ captureHeight = 480
 captureShowBoxOnRecord = False
 
 lipOffset = (0,2)
-lipCircleRadius = 10
+lipCircleRadius = 115
 mouthDetectionConfidenceThreshold = 0.3
 tongueDetectionConfidenceThreshold = 0.2
 eyeDetectionConfidenceThreshold = 0.2
-mouthIntensityThreshold = 15
-eyeIntensityThreshold = 15
+mouthIntensityThreshold = 0
+eyeIntensityThreshold = 0
+
+videoToggleKey = 'g'
+videoToggleState = 0
 
 model = []
 mouthModel = []
@@ -79,7 +83,7 @@ def main():
 def loadSettings():
 	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 	global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight
+	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,videoToggleKey
 	global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 	global streamCheekIntensityTopic
 	with open("mouthMusicSettings.txt", "r") as file:
@@ -103,8 +107,10 @@ def loadSettings():
 		eyeDetectionConfidenceThreshold = float(file.readline().replace("\n",""))
 		mouthIntensityThreshold = int(file.readline().replace("\n",""))
 		eyeIntensityThreshold = int(file.readline().replace("\n",""))
+		videoToggleKey = file.readline()[0]
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
+	updateKeyHook()
 		
 def saveSettings():
 	with open("mouthMusicSettings.txt", "w") as file:
@@ -129,7 +135,9 @@ def saveSettings():
 		file.write("%f\n"%eyeDetectionConfidenceThreshold)
 		file.write("%d\n"%mouthIntensityThreshold)
 		file.write("%d\n"%eyeIntensityThreshold)
+		file.write("%s\n"%videoToggleKey)
 		file.write("%r\n"%captureShowBoxOnRecord)
+	updateKeyHook()
 		
 def setInputVideoSize(captureObject,xDimPx,yDimPx):
 	retx = captureObject.set(3,xDimPx)
@@ -172,14 +180,18 @@ class Application(tk.Frame):
 	def drawStream(self):
 		setStopCurrent(False)
 		self.addBackToHomeButton()
-		runAndStreamDetections(self.master)
+		imageTKLabel = tk.Label(self)
+		imageTKLabel.pack(side="top")
+		runAndStreamDetections(self.master,imageTKLabel)
 		
 	def drawRecord(self):
 		setStopCurrent(False)
 		self.addBackToHomeButton()
+		imageTKLabel = tk.Label(self)
+		imageTKLabel.pack(side="top")
 		fileTypes = [('AVI video', '*.avi')]
 		suppliedFileStream = filedialog.asksaveasfile(filetypes = fileTypes, defaultextension = fileTypes)
-		recordAndStreamDetections(self.master,suppliedFileStream.name)
+		recordAndStreamDetections(self.master,imageTKLabel,suppliedFileStream.name)
 		
 	def drawPositioner(self):
 		setStopCurrent(False)
@@ -260,7 +272,7 @@ class Application(tk.Frame):
 			frame.clearFrame()
 			frame.drawHome()
 			
-		self.packButton("Back",lambda:stopProcessClearFrameAndRedrawHome(self),color="red",side="left",fill="x")
+		self.packButton("Back",lambda:stopProcessClearFrameAndRedrawHome(self),color="red",side="bottom",fill="x")
 		
 	def packSettingsAndGetButtonCommand(self):
 		settingsChildFrame = tk.Frame(self)
@@ -278,7 +290,7 @@ class Application(tk.Frame):
 			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 			global streamCheekIntensityTopic
 			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-			global captureWidth,captureHeight
+			global captureWidth,captureHeight, videoToggleKey
 			global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 			streamIP = settingEntriesDict["IP"].get()
 			streamPort = int(settingEntriesDict["Port"].get())
@@ -298,6 +310,7 @@ class Application(tk.Frame):
 			eyeDetectionConfidenceThreshold = float(settingEntriesDict["Eye Gesture Detection Threshold (0.0 to 1.0)"].get())
 			mouthIntensityThreshold = int(settingEntriesDict["Mouth Trigger Intensity Threshold (0 to 100)"].get())
 			eyeIntensityThreshold = int(settingEntriesDict["Eye Trigger Intensity Threshold (0 to 100)"].get())
+			videoToggleKey = settingEntriesDict["Video On Stream Toggle (a-z,0-9)"].get()[0]
 			saveSettings()
 			setInputVideoSize(capture,captureWidth,captureHeight)
 			
@@ -334,6 +347,7 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Gesture Detection Threshold (0.0 to 1.0)",eyeDetectionConfidenceThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Mouth Trigger Intensity Threshold (0 to 100)",mouthIntensityThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Trigger Intensity Threshold (0 to 100)",eyeIntensityThreshold)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Video On Stream Toggle (a-z,0-9)",videoToggleKey)
 		insertSubframeWithCheckbox(settingsChildFrame,"Detection Box on Video",checkButtonVariable,1,0,setBoxOnRecordSetting)
 		settingsChildFrame.pack({"side":"top","fill":"both","expand":True})
 		return lambda:updateSettingsAndSave(settingEntriesDict)
@@ -341,18 +355,35 @@ class Application(tk.Frame):
 def setStopCurrent(value):
 	global stopCurent
 	stopCurent = value
+
+def updateKeyHook():
+	keyboard.unhook_all()
+	keyboard.on_press_key(videoToggleKey,lambda _:toggleKeyState())
+
+def toggleKeyState():
+	global videoToggleState
+	videoToggleState = 1 - videoToggleState
+
 	
-def runAndStreamDetections(tkRoot,recordFileName=None,recordWriter=None):
+def runAndStreamDetections(tkRoot,imageLabel,recordFileName=None,recordWriter=None):
 	streamClient = OSCClient(streamIP,streamPort)
 	while not stopCurent:
 		tkRoot.update()
-		sendFrameToModelAndProcessOuput(streamClient,recordFileName=recordFileName,recordWriter=recordWriter)
+		if videoToggleState == 1:
+			imageLabel.pack(side="top")
+			processedModelOuputDict,image = sendFrameToModelAndProcessOuput(streamClient,recordFileName=recordFileName,recordWriter=recordWriter,withViz=True)
+			image = addDetectionsToImage(image,processedModelOuputDict)
+			placeOpenCVImageInTK(image,imageLabel)
+		else:
+			sendFrameToModelAndProcessOuput(streamClient,recordFileName=recordFileName,recordWriter=recordWriter)
+			imageLabel.pack_forget()
+
 	
-def recordAndStreamDetections(tkRoot,recordFileName="output.avi"):
+def recordAndStreamDetections(tkRoot,imageLabel,recordFileName="output.avi"):
 	fourcc = cv.VideoWriter_fourcc(*'XVID')
 	recordWriter = cv.VideoWriter()
 	recordWriter.open(recordFileName, fourcc, 30.0, (captureWidth,  captureHeight),True)
-	runAndStreamDetections(tkRoot,recordFileName,recordWriter)
+	runAndStreamDetections(tkRoot,imageLabel,recordFileName,recordWriter)
 	recordWriter.release()
 
 def updateImageAndDetections(parent,imageLabel):
@@ -416,8 +447,9 @@ def addDetectionsToImage(image,processedModelOuputDict):
 	return image
 	
 def addOffsetAndCircleToImage(image,lipPosition):
-	cv.circle(image,lipPosition, 2,(255,255,255),2)
-	cv.circle(image,lipPosition, lipCircleRadius,(255,255,255),2)
+	lipPosWithOffset = lipPosition[0]+lipOffset[0],lipPosition[1] + lipOffset[1]
+	cv.circle(image,lipPosWithOffset, 2,(255,255,255),2)
+	cv.circle(image,lipPosWithOffset, lipCircleRadius,(255,255,255),2)
 	return image	
 	
 def placeOpenCVImageInTK(image,label_image):
