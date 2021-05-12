@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-12 15:04:52
+# @Last Modified time: 2021-05-12 15:22:42
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -508,11 +508,11 @@ def streamModelOutput(modelOutput,streamClient):
 	for key in topicDecays:
 		if topicDecays[key][1] > 0.0 or topicDecays[key][0] > 0:
 			if key == streamCheekIntensityTopic:
-				streamClient.send_message(bytes(topic, encoding="ascii"),[topicDecays[key][0]])
+				streamClient.send_message(bytes(key, encoding="ascii"),[topicDecays[key][0]])
 				streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[modelOutput["xPosition"]])
 				streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[modelOutput["yPosition"]])
 			else:
-				streamClient.send_message(bytes(topic, encoding="ascii"),[topicDecays[key][0]])
+				streamClient.send_message(bytes(key, encoding="ascii"),[topicDecays[key][0]])
 
 def getNewMaxAndDropRate(topic,newValue):
 	global topicDecays
