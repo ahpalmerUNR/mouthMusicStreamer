@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-11 14:21:28
+# @Last Modified time: 2021-05-12 14:26:56
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -34,9 +34,6 @@ streamRightEyeTopic = "/tongue_gestures/right_wink"
 streamLeftEyeTopic = "/tongue_gestures/left_wink"
 streamLeftBrowTopic = "/tongue_gestures/brow"
 
-streamMouthTopicEndControl = [None,None]
-streamEyeTopicEndControl = [None,None]
-
 capture = cv.VideoCapture(0,cv.CAP_DSHOW)
 captureWidth = 640
 captureHeight = 480
@@ -60,6 +57,8 @@ eyeModel = []
 # Flow control and tkinter image workaround list
 stopCurent = True
 tkimg = [None]
+topicDecays = {} #topic:[priorMax,dropdown]
+decayFrames = 3
 
 def main():
 	global mouthModel,eyeModel
@@ -83,7 +82,7 @@ def main():
 def loadSettings():
 	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 	global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,streamToggleKey
+	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,streamToggleKey,decayFrames
 	global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 	global streamCheekIntensityTopic
 	with open("mouthMusicSettings.txt", "r") as file:
@@ -108,6 +107,7 @@ def loadSettings():
 		mouthIntensityThreshold = int(file.readline().replace("\n",""))
 		eyeIntensityThreshold = int(file.readline().replace("\n",""))
 		streamToggleKey = file.readline().replace("\n","")
+		decayFrames = int(file.readline().replace("\n",""))
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
 	updateKeyHook()
@@ -136,6 +136,7 @@ def saveSettings():
 		file.write("%d\n"%mouthIntensityThreshold)
 		file.write("%d\n"%eyeIntensityThreshold)
 		file.write("%s\n"%streamToggleKey)
+		file.write("%d\n"%decayFrames)
 		file.write("%r\n"%captureShowBoxOnRecord)
 	updateKeyHook()
 		
@@ -287,7 +288,7 @@ class Application(tk.Frame):
 			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 			global streamCheekIntensityTopic
 			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-			global captureWidth,captureHeight, streamToggleKey
+			global captureWidth,captureHeight, streamToggleKey, decayFrames
 			global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 			streamIP = settingEntriesDict["IP"].get()
 			streamPort = int(settingEntriesDict["Port"].get())
@@ -308,6 +309,7 @@ class Application(tk.Frame):
 			mouthIntensityThreshold = int(settingEntriesDict["Mouth Trigger Intensity Threshold (0 to 100)"].get())
 			eyeIntensityThreshold = int(settingEntriesDict["Eye Trigger Intensity Threshold (0 to 100)"].get())
 			streamToggleKey = settingEntriesDict["Stream Toggle (use + for multiple keys, and 'plus' for the + key)"].get()
+			decayFrames = int(settingEntriesDict["Signal Decay Frame Length (>=1)"].get())
 			saveSettings()
 			setInputVideoSize(capture,captureWidth,captureHeight)
 			
@@ -345,6 +347,7 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Mouth Trigger Intensity Threshold (0 to 100)",mouthIntensityThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Trigger Intensity Threshold (0 to 100)",eyeIntensityThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Stream Toggle (use + for multiple keys, and 'plus' for the + key)",streamToggleKey)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Signal Decay Frame Length (>=1)",decayFrames)
 		insertSubframeWithCheckbox(settingsChildFrame,"Detection Box on Video",checkButtonVariable,1,0,setBoxOnRecordSetting)
 		settingsChildFrame.pack({"side":"top","fill":"both","expand":True})
 		return lambda:updateSettingsAndSave(settingEntriesDict)
@@ -477,46 +480,57 @@ def streamModelOutput(modelOutput,streamClient):
 	eyeTopic = None
 	if modelOutput["mouthIntensity"] >= mouthIntensityThreshold and modelOutput["mouthTriggerConf"] >= mouthDetectionConfidenceThreshold:
 		if modelOutput["mouthTrigger"] == "In Cheek" and modelOutput["tongueConf"] >= tongueDetectionConfidenceThreshold:
-			streamClient.send_message(bytes(streamCheekIntensityTopic, encoding="ascii"),[modelOutput["mouthIntensity"]])
-			streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[modelOutput["xPosition"]])
-			streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[modelOutput["yPosition"]])
 			mouthTopic = streamCheekIntensityTopic
 		elif modelOutput["mouthTrigger"] == "Pucker Lips":
-			streamClient.send_message(bytes(streamPuckerTopic, encoding="ascii"),[modelOutput["mouthIntensity"]])
 			mouthTopic = streamPuckerTopic
 		elif modelOutput["mouthTrigger"] == "Tongue Out":
-			streamClient.send_message(bytes(streamTongueOutTopic, encoding="ascii"),[modelOutput["mouthIntensity"]])
 			mouthTopic = streamTongueOutTopic
 
 
 	if modelOutput["eyeIntensity"] >= eyeIntensityThreshold and modelOutput["eyeTriggerConf"] >= eyeDetectionConfidenceThreshold:
 		if modelOutput["eyeTrigger"] == "Left Wink":
-			streamClient.send_message(bytes(streamLeftEyeTopic, encoding="ascii"),[modelOutput["eyeIntensity"]])
 			eyeTopic = streamLeftEyeTopic
 		elif modelOutput["eyeTrigger"] == "Right Wink":
-			streamClient.send_message(bytes(streamRightEyeTopic, encoding="ascii"),[modelOutput["eyeIntensity"]])
 			eyeTopic = streamRightEyeTopic
 		elif modelOutput["eyeTrigger"] == "Left Brow":
-			streamClient.send_message(bytes(streamLeftBrowTopic, encoding="ascii"),[modelOutput["eyeIntensity"]])
 			eyeTopic = streamLeftBrowTopic
 
-	if isPriorEyeTopicOver(eyeTopic):
-		streamClient.send_message(bytes(streamEyeTopicEndControl[0],encoding="ascii"),[0])
-	if isPriorMouthTopicOver(mouthTopic):
-		streamClient.send_message(bytes(streamMouthTopicEndControl[0],encoding="ascii"),[0])
+	for key in topicDecays:
+		if key == mouthTopic:
+			getNewMaxAndDropRate(key,modelOutput["mouthIntensity"])
+		elif key == eyeTopic:
+			getNewMaxAndDropRate(key,modelOutput["eyeIntensity"])
+		else:
+			getNewMaxAndDropRate(key,0)
+			
+	for key in topicDecays:
+		if topicDecays[key][1] > 0.0 or topicDecays[key][0] > 0:
+			if key == streamCheekIntensityTopic:
+				streamClient.send_message(bytes(topic, encoding="ascii"),[topicDecays[key][0]])
+				streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[modelOutput["xPosition"]])
+				streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[modelOutput["yPosition"]])
+			else:
+				streamClient.send_message(bytes(topic, encoding="ascii"),[topicDecays[key][0]])
 
-def isPriorEyeTopicOver(eyeTopic):
-	global streamEyeTopicEndControl
-	streamEyeTopicEndControl.append(eyeTopic)
-	streamEyeTopicEndControl.pop(0)
-	return streamEyeTopicEndControl[0] != streamEyeTopicEndControl[1] and streamEyeTopicEndControl[0] != None
+def getNewMaxAndDropRate(topic,newValue):
+	global topicDecays
 
+	if topic not in topicDecays:
+		topicDecays[topic] = [newValue,0.0]
+		return
 
-def isPriorMouthTopicOver(mouthTopic):
-	global streamMouthTopicEndControl
-	streamMouthTopicEndControl.append(mouthTopic)
-	streamMouthTopicEndControl.pop(0)
-	return streamMouthTopicEndControl[0] != streamMouthTopicEndControl[1] and streamMouthTopicEndControl[0] != None
+	newDecay = (topicDecays[topic][0] - newValue)/float(decayFrames)
+	if newValue > topicDecays[topic][0]:
+		topicDecays[topic][0] = newValue
+		topicDecays[topic][1] = 0.0
+	elif newDecay > topicDecays[topic][1]: 
+		topicDecays[topic][0] = int(topicDecays[topic][0] - newDecay)
+		topicDecays[topic][1] = newDecay
+	elif newDecay == 0.0: 
+		topicDecays[topic][1] = newDecay
+	else:
+		topicDecays[topic][0] = max(int(topicDecays[topic][0] - topicDecays[topic][1]),newValue,0)
+
 	
 def recordFrame(recordWriter,image,processedModelOuputDict):
 	if captureShowBoxOnRecord:
