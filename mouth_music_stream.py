@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-12 14:26:56
+# @Last Modified time: 2021-05-12 15:04:52
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -111,6 +111,7 @@ def loadSettings():
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
 	updateKeyHook()
+	loadDecayTopics()
 		
 def saveSettings():
 	with open("mouthMusicSettings.txt", "w") as file:
@@ -139,6 +140,7 @@ def saveSettings():
 		file.write("%d\n"%decayFrames)
 		file.write("%r\n"%captureShowBoxOnRecord)
 	updateKeyHook()
+	loadDecayTopics()
 		
 def setInputVideoSize(captureObject,xDimPx,yDimPx):
 	retx = captureObject.set(3,xDimPx)
@@ -532,6 +534,16 @@ def getNewMaxAndDropRate(topic,newValue):
 		topicDecays[topic][0] = max(int(topicDecays[topic][0] - topicDecays[topic][1]),newValue,0)
 
 	
+def loadDecayTopics():
+	global topicDecays
+	topicDecays[streamCheekIntensityTopic] = [0,0.0]
+	topicDecays[streamPuckerTopic] = [0,0.0]
+	topicDecays[streamTongueOutTopic] = [0,0.0]
+	topicDecays[streamRightEyeTopic] = [0,0.0]
+	topicDecays[streamLeftEyeTopic] = [0,0.0]
+	topicDecays[streamLeftBrowTopic] = [0,0.0]
+
+
 def recordFrame(recordWriter,image,processedModelOuputDict):
 	if captureShowBoxOnRecord:
 		image = addDetectionsToImage(image,processedModelOuputDict)
