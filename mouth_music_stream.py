@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-12 15:22:42
+# @Last Modified time: 2021-05-13 14:47:10
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -58,14 +58,16 @@ eyeModel = []
 stopCurent = True
 tkimg = [None]
 topicDecays = {} #topic:[priorMax,dropdown]
+positionChanges = {} #topic:[priorVal,change]
 decayFrames = 3
+decayFramesPosition = 3
 
 def main():
 	global mouthModel,eyeModel
 	try:
 		loadSettings()
 	except Exception as e:
-		print("Settings Reset to Default")
+		print("Settings After Load Failure Reset to Default")
 		saveSettings()
 	setInputVideoSize(capture,captureWidth,captureHeight)
 	mouthModel,eyeModel = mmodel.loadModel("","mouthmodel.pt") # Uses model base name (arg 1) in local directory (arg 0)
@@ -82,7 +84,7 @@ def main():
 def loadSettings():
 	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 	global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,streamToggleKey,decayFrames
+	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,streamToggleKey,decayFrames,decayFramesPosition
 	global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 	global streamCheekIntensityTopic
 	with open("mouthMusicSettings.txt", "r") as file:
@@ -108,6 +110,7 @@ def loadSettings():
 		eyeIntensityThreshold = int(file.readline().replace("\n",""))
 		streamToggleKey = file.readline().replace("\n","")
 		decayFrames = int(file.readline().replace("\n",""))
+		decayFramesPosition = int(file.readline().replace("\n",""))
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
 	updateKeyHook()
@@ -138,6 +141,7 @@ def saveSettings():
 		file.write("%d\n"%eyeIntensityThreshold)
 		file.write("%s\n"%streamToggleKey)
 		file.write("%d\n"%decayFrames)
+		file.write("%d\n"%decayFramesPosition)
 		file.write("%r\n"%captureShowBoxOnRecord)
 	updateKeyHook()
 	loadDecayTopics()
@@ -290,7 +294,7 @@ class Application(tk.Frame):
 			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 			global streamCheekIntensityTopic
 			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
-			global captureWidth,captureHeight, streamToggleKey, decayFrames
+			global captureWidth,captureHeight, streamToggleKey, decayFrames,decayFramesPosition
 			global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
 			streamIP = settingEntriesDict["IP"].get()
 			streamPort = int(settingEntriesDict["Port"].get())
@@ -312,6 +316,7 @@ class Application(tk.Frame):
 			eyeIntensityThreshold = int(settingEntriesDict["Eye Trigger Intensity Threshold (0 to 100)"].get())
 			streamToggleKey = settingEntriesDict["Stream Toggle (use + for multiple keys, and 'plus' for the + key)"].get()
 			decayFrames = int(settingEntriesDict["Signal Decay Frame Length (>=1)"].get())
+			decayFramesPosition = int(settingEntriesDict["Position Decay Frame Length (>=1)"].get())
 			saveSettings()
 			setInputVideoSize(capture,captureWidth,captureHeight)
 			
@@ -350,6 +355,7 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Eye Trigger Intensity Threshold (0 to 100)",eyeIntensityThreshold)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Stream Toggle (use + for multiple keys, and 'plus' for the + key)",streamToggleKey)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Signal Decay Frame Length (>=1)",decayFrames)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Position Decay Frame Length (>=1)",decayFramesPosition)
 		insertSubframeWithCheckbox(settingsChildFrame,"Detection Box on Video",checkButtonVariable,1,0,setBoxOnRecordSetting)
 		settingsChildFrame.pack({"side":"top","fill":"both","expand":True})
 		return lambda:updateSettingsAndSave(settingEntriesDict)
@@ -483,6 +489,8 @@ def streamModelOutput(modelOutput,streamClient):
 	if modelOutput["mouthIntensity"] >= mouthIntensityThreshold and modelOutput["mouthTriggerConf"] >= mouthDetectionConfidenceThreshold:
 		if modelOutput["mouthTrigger"] == "In Cheek" and modelOutput["tongueConf"] >= tongueDetectionConfidenceThreshold:
 			mouthTopic = streamCheekIntensityTopic
+			getNewValAndChangeRate(streamHorizontalTopic,modelOutput["xPosition"])
+			getNewValAndChangeRate(streamVerticalTopic,modelOutput["yPosition"])
 		elif modelOutput["mouthTrigger"] == "Pucker Lips":
 			mouthTopic = streamPuckerTopic
 		elif modelOutput["mouthTrigger"] == "Tongue Out":
@@ -509,10 +517,14 @@ def streamModelOutput(modelOutput,streamClient):
 		if topicDecays[key][1] > 0.0 or topicDecays[key][0] > 0:
 			if key == streamCheekIntensityTopic:
 				streamClient.send_message(bytes(key, encoding="ascii"),[topicDecays[key][0]])
-				streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[modelOutput["xPosition"]])
-				streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[modelOutput["yPosition"]])
+				streamClient.send_message(bytes(streamHorizontalTopic, encoding="ascii"),[positionChanges[streamHorizontalTopic][0]])
+				streamClient.send_message(bytes(streamVerticalTopic, encoding="ascii"),[positionChanges[streamVerticalTopic][0]])
 			else:
 				streamClient.send_message(bytes(key, encoding="ascii"),[topicDecays[key][0]])
+		else:
+			if key == streamCheekIntensityTopic:
+				getNewValAndChangeRate(streamHorizontalTopic,-1)
+				getNewValAndChangeRate(streamVerticalTopic,-1)
 
 def getNewMaxAndDropRate(topic,newValue):
 	global topicDecays
@@ -532,6 +544,31 @@ def getNewMaxAndDropRate(topic,newValue):
 		topicDecays[topic][1] = newDecay
 	else:
 		topicDecays[topic][0] = max(int(topicDecays[topic][0] - topicDecays[topic][1]),newValue,0)
+
+def getNewValAndChangeRate(topic,newValue):
+	global positionChanges
+
+	if topic not in positionChanges:
+		positionChanges[topic] = [newValue,0.0]
+		return
+
+	newChange = (newValue - positionChanges[topic][0])/float(decayFramesPosition)
+
+	if positionChanges[topic][1]*newChange < 0.0 and newValue != -1:
+		positionChanges[topic][1] = newChange
+
+	elif positionChanges[topic][0] == -1 or newValue == -1:
+		positionChanges[topic][0] = newValue
+		positionChanges[topic][1] = 0.0
+		return
+	else:
+		positionChanges[topic][1] = newChange if abs(newChange) > abs(positionChanges[topic][1]) else positionChanges[topic][1]
+
+	if abs(positionChanges[topic][1]) > abs(newValue - positionChanges[topic][0]) or (abs(newValue - positionChanges[topic][0]) < decayFramesPosition and int(positionChanges[topic][0] + positionChanges[topic][1]) == positionChanges[topic][0]):
+		positionChanges[topic][0] = newValue
+		positionChanges[topic][1] = 0.0
+	else:
+		positionChanges[topic][0] = int(positionChanges[topic][0] + positionChanges[topic][1])
 
 	
 def loadDecayTopics():
