@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-13 16:30:55
+# @Last Modified time: 2021-05-13 16:47:16
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -568,7 +568,7 @@ def getNewValAndChangeRate(topic,newValue):
 		positionChanges[topic][0] = newValue
 		positionChanges[topic][1] = 0.0
 	else:
-		positionChanges[topic][0] = int(positionChanges[topic][0] + positionChanges[topic][1])
+		positionChanges[topic][0] = positionChanges[topic][0] + positionChanges[topic][1]
 
 	
 def loadDecayTopics():
@@ -598,8 +598,8 @@ def projectToSquareInCircle(tonguePosition,lipPosition):
 	if np.linalg.norm(tongueVector) > enscribedSquareDistance:
 		ratio = enscribedSquareDistance/np.linalg.norm(tongueVector)
 		tongueVector = tongueVector*ratio
-	horizontalDiffScaled = int(streamNumberOfPositions*(tongueVector[0] + lipCircleRadius)/(2*lipCircleRadius))
-	verticalDiffScaled = int(streamNumberOfPositions*(tongueVector[1] + lipCircleRadius)/(2*lipCircleRadius))
+	horizontalDiffScaled = streamNumberOfPositions*(tongueVector[0] + lipCircleRadius)/(2*lipCircleRadius)
+	verticalDiffScaled = streamNumberOfPositions*(tongueVector[1] + lipCircleRadius)/(2*lipCircleRadius)
 	return horizontalDiffScaled,verticalDiffScaled
 
 if __name__ == '__main__':
