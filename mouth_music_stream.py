@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-13 14:47:10
+# @Last Modified time: 2021-05-13 16:30:55
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -564,7 +564,7 @@ def getNewValAndChangeRate(topic,newValue):
 	else:
 		positionChanges[topic][1] = newChange if abs(newChange) > abs(positionChanges[topic][1]) else positionChanges[topic][1]
 
-	if abs(positionChanges[topic][1]) > abs(newValue - positionChanges[topic][0]) or (abs(newValue - positionChanges[topic][0]) < decayFramesPosition and int(positionChanges[topic][0] + positionChanges[topic][1]) == positionChanges[topic][0]):
+	if abs(positionChanges[topic][1]) > abs(newValue - positionChanges[topic][0]):
 		positionChanges[topic][0] = newValue
 		positionChanges[topic][1] = 0.0
 	else:
