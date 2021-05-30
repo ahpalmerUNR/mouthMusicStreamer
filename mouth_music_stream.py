@@ -2,7 +2,7 @@
 # @Author: ahpalmerUNR
 # @Date:   2021-01-19 15:34:08
 # @Last Modified by:   ahpalmerUNR
-# @Last Modified time: 2021-05-13 16:47:16
+# @Last Modified time: 2021-05-29 22:32:55
 import MouthMusicModel as mmodel
 import mouthFuncs as mfunc 
 
@@ -26,6 +26,8 @@ streamPort = 6731
 streamCheekIntensityTopic = "/tongue_gestures/intensity"
 streamHorizontalTopic = "/tongue_gestures/horizontal"
 streamVerticalTopic = "/tongue_gestures/vertical"
+streamHorizontalTiltTopic = "/tongue_gestures/horizontal_tilt"
+streamVerticalTiltTopic = "/tongue_gestures/vertical_tilt"
 streamPuckerTopic = "/tongue_gestures/pucker"
 streamTongueOutTopic = "/tongue_gestures/tongue_out"
 streamNumberOfPositions = 100
@@ -49,6 +51,7 @@ eyeIntensityThreshold = 0
 
 streamToggleKey = 'f12'
 streamToggleState = 1
+streamLipPositionSet = (-1,-1)
 
 model = []
 mouthModel = []
@@ -61,13 +64,14 @@ topicDecays = {} #topic:[priorMax,dropdown]
 positionChanges = {} #topic:[priorVal,change]
 decayFrames = 3
 decayFramesPosition = 3
+decayFramesTilt = 3
 
 def main():
 	global mouthModel,eyeModel
 	try:
 		loadSettings()
 	except Exception as e:
-		print("Settings After Load Failure Reset to Default")
+		print("Settings After Load Failure. Non-Loaded Settings Set to Default.")
 		saveSettings()
 	setInputVideoSize(capture,captureWidth,captureHeight)
 	mouthModel,eyeModel = mmodel.loadModel("","mouthmodel.pt") # Uses model base name (arg 1) in local directory (arg 0)
@@ -83,6 +87,7 @@ def main():
 
 def loadSettings():
 	global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
+	global streamHorizontalTiltTopic,streamVerticalTiltTopic,decayFramesTilt
 	global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
 	global lipOffset,lipCircleRadius,captureShowBoxOnRecord,captureWidth,captureHeight,streamToggleKey,decayFrames,decayFramesPosition
 	global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
@@ -111,6 +116,9 @@ def loadSettings():
 		streamToggleKey = file.readline().replace("\n","")
 		decayFrames = int(file.readline().replace("\n",""))
 		decayFramesPosition = int(file.readline().replace("\n",""))
+		streamHorizontalTiltTopic = file.readline().replace("\n","")
+		streamVerticalTiltTopic = file.readline().replace("\n","")
+		decayFramesTilt = int(file.readline().replace("\n",""))
 		stringIn = file.readline().replace("\n","")
 		captureShowBoxOnRecord	= False if stringIn == "False" else True
 	updateKeyHook()
@@ -142,6 +150,9 @@ def saveSettings():
 		file.write("%s\n"%streamToggleKey)
 		file.write("%d\n"%decayFrames)
 		file.write("%d\n"%decayFramesPosition)
+		file.write(streamHorizontalTiltTopic + "\n")
+		file.write(streamVerticalTiltTopic+"\n")
+		file.write("%d\n"%decayFramesTilt)
 		file.write("%r\n"%captureShowBoxOnRecord)
 	updateKeyHook()
 	loadDecayTopics()
@@ -293,6 +304,7 @@ class Application(tk.Frame):
 		def updateSettingsAndSave(settingEntriesDict):
 			global streamIP,streamPort,streamVerticalTopic,streamHorizontalTopic,streamNumberOfPositions,streamPuckerTopic,streamTongueOutTopic
 			global streamCheekIntensityTopic
+			global streamHorizontalTiltTopic,streamVerticalTiltTopic,decayFramesTilt
 			global streamRightEyeTopic,streamLeftEyeTopic,streamLeftBrowTopic
 			global captureWidth,captureHeight, streamToggleKey, decayFrames,decayFramesPosition
 			global mouthDetectionConfidenceThreshold,tongueDetectionConfidenceThreshold,eyeDetectionConfidenceThreshold,mouthIntensityThreshold,eyeIntensityThreshold
@@ -300,6 +312,8 @@ class Application(tk.Frame):
 			streamPort = int(settingEntriesDict["Port"].get())
 			streamVerticalTopic = settingEntriesDict["Vertical Topic"].get()
 			streamHorizontalTopic = settingEntriesDict["Horizontal Topic"].get()
+			streamVerticalTiltTopic = settingEntriesDict["Vertical Tilt Topic"].get()
+			streamHorizontalTiltTopic = settingEntriesDict["Horizontal Tilt Topic"].get()
 			streamPuckerTopic = settingEntriesDict["Pucker Topic"].get()
 			streamTongueOutTopic = settingEntriesDict["Tongue Out Topic"].get()
 			streamCheekIntensityTopic = settingEntriesDict["Cheek Intensity Topic"].get()
@@ -317,6 +331,7 @@ class Application(tk.Frame):
 			streamToggleKey = settingEntriesDict["Stream Toggle (use + for multiple keys, and 'plus' for the + key)"].get()
 			decayFrames = int(settingEntriesDict["Signal Decay Frame Length (>=1)"].get())
 			decayFramesPosition = int(settingEntriesDict["Position Decay Frame Length (>=1)"].get())
+			decayFramesTilt = int(settingEntriesDict["Tilt Decay Frame Length (>=1)"].get())
 			saveSettings()
 			setInputVideoSize(capture,captureWidth,captureHeight)
 			
@@ -339,6 +354,8 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Port",streamPort)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Vertical Topic",streamVerticalTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Horizontal Topic",streamHorizontalTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Vertical Tilt Topic",streamVerticalTiltTopic)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Horizontal Tilt Topic",streamHorizontalTiltTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Pucker Topic",streamPuckerTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tongue Out Topic",streamTongueOutTopic)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Cheek Intensity Topic",streamCheekIntensityTopic)
@@ -356,6 +373,7 @@ class Application(tk.Frame):
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Stream Toggle (use + for multiple keys, and 'plus' for the + key)",streamToggleKey)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Signal Decay Frame Length (>=1)",decayFrames)
 		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Position Decay Frame Length (>=1)",decayFramesPosition)
+		insertSubFrameWithLabelAndEntry(settingsChildFrame,settingEntriesDict,"Tilt Decay Frame Length (>=1)",decayFramesTilt)
 		insertSubframeWithCheckbox(settingsChildFrame,"Detection Box on Video",checkButtonVariable,1,0,setBoxOnRecordSetting)
 		settingsChildFrame.pack({"side":"top","fill":"both","expand":True})
 		return lambda:updateSettingsAndSave(settingEntriesDict)
@@ -372,8 +390,9 @@ def updateKeyHook():
 	keyboard.add_hotkey(streamToggleKey,lambda :toggleKeyState())
 
 def toggleKeyState():
-	global streamToggleState
+	global streamToggleState, streamLipPositionSet
 	streamToggleState = 1 - streamToggleState
+	streamLipPositionSet = (-1,-1)
 	print("Stream On" if streamToggleState == 1 else "Stream Off")
 
 	
@@ -477,20 +496,27 @@ def getFrame(outputW,outputH):
 	return sample,img
 		
 def processModelOuput(modelOuput):
+	global streamLipPositionSet
 	detectionDict = mfunc.decodeLabel(modelOuput)
 	xPosition, yPosition = projectToSquareInCircle(detectionDict["tonguePosition"],detectionDict["lipPosition"])
 	detectionDict["xPosition"] = xPosition
 	detectionDict["yPosition"] = yPosition
+	if streamLipPositionSet == (-1,-1):
+		streamLipPositionSet = detectionDict["lipPosition"]
 	return detectionDict		
 	
 def streamModelOutput(modelOutput,streamClient):
 	mouthTopic = None
 	eyeTopic = None
+
+	getNewValAndChangeRate(streamHorizontalTiltTopic,modelOutput["lipPosition"][0] - streamLipPositionSet[0],decayFramesTilt)
+	getNewValAndChangeRate(streamVerticalTiltTopic,modelOutput["lipPosition"][1] - streamLipPositionSet[1],decayFramesTilt)
+
 	if modelOutput["mouthIntensity"] >= mouthIntensityThreshold and modelOutput["mouthTriggerConf"] >= mouthDetectionConfidenceThreshold:
 		if modelOutput["mouthTrigger"] == "In Cheek" and modelOutput["tongueConf"] >= tongueDetectionConfidenceThreshold:
 			mouthTopic = streamCheekIntensityTopic
-			getNewValAndChangeRate(streamHorizontalTopic,modelOutput["xPosition"])
-			getNewValAndChangeRate(streamVerticalTopic,modelOutput["yPosition"])
+			getNewValAndChangeRate(streamHorizontalTopic,modelOutput["xPosition"],decayFramesPosition)
+			getNewValAndChangeRate(streamVerticalTopic,modelOutput["yPosition"],decayFramesPosition)
 		elif modelOutput["mouthTrigger"] == "Pucker Lips":
 			mouthTopic = streamPuckerTopic
 		elif modelOutput["mouthTrigger"] == "Tongue Out":
@@ -512,7 +538,10 @@ def streamModelOutput(modelOutput,streamClient):
 			getNewMaxAndDropRate(key,modelOutput["eyeIntensity"])
 		else:
 			getNewMaxAndDropRate(key,0)
-			
+
+	streamClient.send_message(bytes(streamHorizontalTiltTopic, encoding="ascii"),[positionChanges[streamHorizontalTiltTopic][0]])
+	streamClient.send_message(bytes(streamVerticalTiltTopic, encoding="ascii"),[positionChanges[streamVerticalTiltTopic][0]])
+
 	for key in topicDecays:
 		if topicDecays[key][1] > 0.0 or topicDecays[key][0] > 0:
 			if key == streamCheekIntensityTopic:
@@ -523,8 +552,8 @@ def streamModelOutput(modelOutput,streamClient):
 				streamClient.send_message(bytes(key, encoding="ascii"),[topicDecays[key][0]])
 		else:
 			if key == streamCheekIntensityTopic:
-				getNewValAndChangeRate(streamHorizontalTopic,-1)
-				getNewValAndChangeRate(streamVerticalTopic,-1)
+				getNewValAndChangeRate(streamHorizontalTopic,-1,decayFramesPosition)
+				getNewValAndChangeRate(streamVerticalTopic,-1,decayFramesPosition)
 
 def getNewMaxAndDropRate(topic,newValue):
 	global topicDecays
@@ -545,14 +574,14 @@ def getNewMaxAndDropRate(topic,newValue):
 	else:
 		topicDecays[topic][0] = max(int(topicDecays[topic][0] - topicDecays[topic][1]),newValue,0)
 
-def getNewValAndChangeRate(topic,newValue):
+def getNewValAndChangeRate(topic,newValue,decayRate):
 	global positionChanges
 
 	if topic not in positionChanges:
 		positionChanges[topic] = [newValue,0.0]
 		return
 
-	newChange = (newValue - positionChanges[topic][0])/float(decayFramesPosition)
+	newChange = (newValue - positionChanges[topic][0])/float(decayRate)
 
 	if positionChanges[topic][1]*newChange < 0.0 and newValue != -1:
 		positionChanges[topic][1] = newChange

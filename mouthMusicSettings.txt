@@ -22,4 +22,7 @@
 f12
 3
 4
+/tongue_gestures/horizontal_tilt
+/tongue_gestures/vertical_tilt
+4
 False
